@@ -9,7 +9,7 @@ Számlák letöltése díjnetről.
  - pip
  
 ### Telepítés
- - pip install -r requirements.txt
+ - `pip install -r requirements.txt`
  
 ### Beállítás
 Írd bele a jelszavad és a felhasználóneved a `dijnet.ini` fájlba.
