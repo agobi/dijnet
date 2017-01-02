@@ -15,4 +15,4 @@ Számlák letöltése díjnetről.
 Írd bele a jelszavad és a felhasználóneved a `dijnet.ini` fájlba.
 
 ### Futtatás
-`./dijnet.ini`
+`./dijnet.py`
