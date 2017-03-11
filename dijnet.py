@@ -31,7 +31,7 @@ soup = BeautifulSoup(resp.get_data(), "lxml")
 urls = [t.td.a["href"] for t in soup.find_all('table')[1].find_all('tr') ]
 
 for url in urls:
-    br.follow_link(predicate=lambda link: ('href', href) in link.attrs)
+    br.follow_link(predicate=lambda link: ('href', url) in link.attrs)
     br.follow_link(text='Let\xf6lt\xe9s')
     try:
         link = br.find_link(text='\xa0Sz\xe1mla nyomtathat\xf3 verzi\xf3ja (PDF) - Hiteles sz\xe1mla')
