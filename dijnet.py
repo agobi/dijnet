@@ -1,45 +1,47 @@
 #!/usr/bin/env python2
+# vim: set fileencoding=utf-8 :
 
-import mechanize
-from bs4 import BeautifulSoup
-import os
+import ConfigParser
 import cgi
 import sys
-import ConfigParser
+
+import mechanicalsoup
 
 config = ConfigParser.SafeConfigParser()
 config.read("dijnet.ini")
 
-br = mechanize.Browser()
+br = mechanicalsoup.StatefulBrowser(soup_config={'features': 'lxml'})
 br.open("http://dijnet.hu")
 
-br.select_form("loginform")
+br.select_form("#login-form")
 br["username"] = config.get("global", "username")
 br["password"] = config.get("global", "password")
-br.submit()
-if br.title() != 'D\xcdJNET':
+br.submit_selected()
+if not br.get_current_page().find(string="Ügyfél: "):
     print >> sys.stderr, "A bejelentkezes nem sikerult."
     sys.exit(1)
 
-br.follow_link(text='Sz\xe1mlakeres\xe9s')
-assert br.title() == 'D\xcdJNET'
+br.follow_link(link_text=u'Számlakeresés')
+assert br.get_current_page().title.text == u'DÍJNET'
 
 br.select_form(nr=0)
-resp = br.submit()
-soup = BeautifulSoup(resp.get_data(), "lxml")
+br.submit_selected()
+page = br.get_current_page()
 
-urls = [t.td.a["href"] for t in soup.find_all('table')[1].find_all('tr') ]
+links = [t.td.a for t in page.select('table.szamla_table')[0].find_all('tr')]
 
-for url in urls:
-    br.follow_link(predicate=lambda link: ('href', url) in link.attrs)
-    br.follow_link(text='Let\xf6lt\xe9s')
-    try:
-        link = br.find_link(text='\xa0Sz\xe1mla nyomtathat\xf3 verzi\xf3ja (PDF) - Hiteles sz\xe1mla')
-    except:
-        link = br.find_link(text='\xa0Hiteles sz\xe1mla')
-    (fn, info) = br.retrieve(link.absolute_url, "tmp")
-    header = info.getheader('Content-Disposition')
+for link in links:
+    br.follow_link(link)
+    br.follow_link(link_text=u'Letöltés')
+
+    download_link = br.find_link(link_text=u'\xa0Számla nyomtatható verziója (PDF) - Hiteles számla')
+
+    data = br.session.get(br.absolute_url(download_link['href']))
+    header = data.headers['Content-Disposition']
     value, params = cgi.parse_header(header)
-    os.rename(fn, params['filename'])
+    with open(params['filename'], "w") as f:
+        f.write(data.content)
     print params['filename']
-    br.follow_link(text='[IMG]\xa0vissza a list\xe1hoz')
+
+    return_link = br.get_current_page().select('a.xt_link__title')
+    br.follow_link(return_link[0])
