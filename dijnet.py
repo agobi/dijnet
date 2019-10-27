@@ -7,10 +7,12 @@ import sys
 
 import mechanicalsoup
 
-def onclickParser(onclick):
-    linkStartIndex = onclick.find('\'') + 1
-    onclickLink = onclick[linkStartIndex:-2]
-    return onclickLink
+
+def onclick_parser(onclick):
+    link_start_index = onclick.find('\'') + 1
+    onclick_link = onclick[link_start_index:-2]
+    return onclick_link
+
 
 config = configparser.ConfigParser()
 config.read("dijnet.ini")
@@ -42,7 +44,7 @@ page = br.get_current_page()
 links = []
 
 for t in page.select('table.szamla_table')[0].find_all('tr'):
-    links.append(url + onclickParser(t.td['onclick']))
+    links.append(url + onclick_parser(t.td['onclick']))
 
 for link in links:
     br.open(link)
