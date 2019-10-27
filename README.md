@@ -5,7 +5,7 @@ Számlák letöltése díjnetről.
 ## Telepítés
 
 ### Követelmények:
- - python2
+ - python3
  - pip
  
 ### Telepítés
