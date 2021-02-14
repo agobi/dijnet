@@ -101,8 +101,10 @@ def main(ui: UserInterface):
     for t_index, t_head in enumerate(szamla_table.find_all('th')):
         column_name = t_head.get_text(strip=True)
         if column_name in order_by:
-            order_by_list.append(t_index)
+            order_by_index = order_by.index(column_name)
+            order_by_list.insert(order_by_index, t_index)
 
+    order_by_list = list(filter(None, order_by_list)) 
     links = []
     order_by_path = []
 
