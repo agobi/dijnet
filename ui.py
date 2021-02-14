@@ -15,6 +15,10 @@ class UserInterface(ABC):
     def ask(self, prompt: str) -> str:
         pass
 
+    @abstractmethod
+    def progress_bar(self, percent: int, fill: str):
+        pass
+
 
 class ConsoleUserInterface(UserInterface):
     def show_message(self, msg):
@@ -25,3 +29,8 @@ class ConsoleUserInterface(UserInterface):
 
     def ask(self, prompt: str) -> str:
         return input(prompt)
+
+    def progress_bar(self, percent, fill = '█'):
+        bar = fill * percent
+        return bar
+

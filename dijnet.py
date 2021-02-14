@@ -4,6 +4,8 @@
 import configparser
 import cgi
 import sys
+import os
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -28,8 +30,8 @@ def read_config(ini_file_name: str, template_file_name: str, app_directory: str,
     template_file = Path(app_directory, template_file_name)
 
     if ini_file.exists():
-        config = configparser.ConfigParser()
-        config.read(ini_file)
+        config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
+        config.read(ini_file, encoding="UTF-8")
         return config
 
     ui.show_message(f"Nincs még {ini_file}, létrehozunk egyet")
@@ -37,12 +39,24 @@ def read_config(ini_file_name: str, template_file_name: str, app_directory: str,
         ui.show_error(f"Nem található template ({template_file})")
         return None
 
-    config = configparser.ConfigParser()
+    config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
     config.read(template_file)
     ui.show_message(f"Az {ini_file} összeálltásához szükség lesz a dijnet.hu belépési adatokra.")
     config.set("global", "username", ui.ask("Username: "))
     config.set("global", "password", ui.ask("Password: "))
-    with open(ini_file, "w") as f:
+
+    ui.show_message(f"Megadhatja hogy a program hova mentse a számláit. (Pl.: C:\\, /home) " +
+                    "Ha nem ad meg semmit a számlák a program mappájába lesznek mentve. " +
+                    "A 'dijnet_szamlak' mappát a program mindnen esetben létrehozza.")
+    config.set("global", "save_as", ui.ask("Mentés helye: "))
+    
+    ui.show_message(f"Megadhatja hogy a program hogyan rendezze számláit. " +
+                    "A dijnet számlakeresés oldalán található táblázat oszlopneveit " +
+                    "használhatja '|' karakterrel elválasztva egymástól. " +
+                    "(Pl.: Számlakibocsátói azonosító|Állapot)")
+    config.set('global', 'order_by', ui.ask("Rendezés szempotja: "))
+
+    with open(ini_file, "w", encoding="utf-8") as f:
         config.write(f)
     return config
 
@@ -60,6 +74,8 @@ def main(ui: UserInterface):
     url = config.get('global', 'url')
     login_page = url + config.get('global', 'login')
     logout_page = url + config.get('global', 'logout')
+    order_by = config.get('global', 'order_by').split('|')
+    root_folder = config.get('global', 'save_as')
 
     browser = mechanicalsoup.StatefulBrowser(soup_config={'features': 'lxml'})
     browser.open(login_page)
@@ -78,13 +94,33 @@ def main(ui: UserInterface):
     browser.select_form(nr=0)
     browser.submit_selected()
     page = browser.get_current_page()
+    szamla_table = page.select('table.szamla_table')[0]
+
+    order_by_list = []
+
+    for t_index, t_head in enumerate(szamla_table.find_all('th')):
+        column_name = t_head.get_text(strip=True)
+        if column_name in order_by:
+            order_by_list.append(t_index)
 
     links = []
+    order_by_path = []
 
-    for row in page.select('table.szamla_table')[0].find_all('tr'):
-        links.append(url + onclick_parser(row.td['onclick']))
+    for row_index, row in enumerate(szamla_table.find_all('tr')):
+        save_path = ['dijnet_szamlak']
+        for item in order_by_list:
+            path_text = row.contents[item].get_text(strip=True)
+            clean_path = re.sub(r'[\\/\:*"<>\|\.%\$\^&£]', '_', path_text)
+            save_path.append(clean_path)
+        
+        order_by_path.append(Path(root_folder, *save_path))
+        
+        bill_page = config.get('global', 'current_bill', vars={'szamla_id': row_index})
+        links.append(url + bill_page)
 
-    for link in links:
+    ui.show_message(f'Összesen {len(links)} db számla van...')
+    
+    for link_index, link in enumerate(links):
         browser.open(link)
         browser.follow_link(link_text=u'Letöltés')
         page = browser.get_current_page()
@@ -95,16 +131,33 @@ def main(ui: UserInterface):
             if 'Hiteles számla' in message.text:
                 link_text = message.text
 
+        if link_text == '':
+            link_text = '\xa0Terhelési összesítő nyomtatható verziója (PDF)'
+
         download_link = browser.find_link(link_text=link_text)
 
         data = browser.session.get(browser.absolute_url(download_link['href']))
         header = data.headers['Content-Disposition']
         value, params = cgi.parse_header(header)
-        with open(params['filename'], "wb") as f:
-            f.write(data.content)
 
-        ui.show_message(params['filename'])
+        if not os.path.exists(Path(order_by_path[link_index], params['filename'])):
+            if not os.path.exists(Path(order_by_path[link_index])):
+                os.makedirs(Path(order_by_path[link_index]))
+            with open(Path(order_by_path[link_index], params['filename']), "wb") as f:
+                f.write(data.content)
 
+        process_percent = (link_index + 1) / len(links)
+        process_string = f'Letöltés {"{:.1%}".format(process_percent)}'
+        process_in_bar = int(process_percent * 10)
+
+        save_string = Path(order_by_path[link_index], params['filename'])
+
+        ui.show_message("{0:15} {1}{2:10}{3} {4}".format(process_string,
+                                                      "|",
+                                                      ui.progress_bar(process_in_bar),
+                                                      "|",
+                                                      save_string))
+        
         return_link = browser.get_current_page().select('a.xt_link__title')
         browser.follow_link(return_link[0])
 
